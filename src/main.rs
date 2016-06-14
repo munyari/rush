@@ -13,20 +13,26 @@ fn main() {
 
     stdin().read_line(&mut user_input).expect("Failed to read line");
 
-    // TODO: needs to preserve string quoted areas
     // Do I need to use a collection of strings?
     let mut command_line = user_input.split_whitespace(); //.collect::<Vec<&str>>();
     let command = command_line.next().unwrap();
 
     println!("command: {}", command);
 
-    for argument in command_line {
-        println!("argument: {}", argument);
-    }
-    let mut out = Command::new(command).spawn().expect("Invalid command");
+    let arguments = command_line.collect::<Vec<&str>>();
+    // for argument in command_line {
+    //     println!("argument: {}", argument);
+    // }
+    let mut out = Command::new(command)
+                            .args(&arguments[..])
+                            .spawn()
+                            .expect("Invalid command");
     let ecode = out.wait().expect("Ahh!!");
     let exit_status = ecode.success();
     println!("Exited {} ", exit_status);
+
+    // arguments!
+    
     // DONE: read in command
     // tokenize command (executable, argumentList, optional connectors)
     // execute the command
