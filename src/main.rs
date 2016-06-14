@@ -53,3 +53,11 @@ fn run_statement(statement: &str) -> io::Result<()> {
 
     Ok(())
 }
+
+fn print_disclaimer() {
+    let disclaimer = "Rush -  Copyright (C) 2016  Panashe M. Fundira \
+    \nThis program comes with ABSOLUTELY NO WARRANTY; for details type `show w'. \
+    \nThis is free software, and you are welcome to redistribute it \
+    \nunder certain conditions; type `show c' for details.";
+    println!("{}", disclaimer);
+}
