@@ -13,31 +13,18 @@ fn main() {
 
     stdin().read_line(&mut user_input).expect("Failed to read line");
 
-    // Do I need to use a collection of strings?
-    let mut command_line = user_input.split_whitespace(); //.collect::<Vec<&str>>();
-    let command = command_line.next().unwrap();
+    for statement in user_input.split(";") {
+        let mut command_line = statement.split_whitespace();
+        let command = command_line.next().unwrap();
+        println!("command: {}", command);
 
-    println!("command: {}", command);
-
-    let arguments = command_line.collect::<Vec<&str>>();
-    // for argument in command_line {
-    //     println!("argument: {}", argument);
-    // }
-    let mut out = Command::new(command)
-                            .args(&arguments[..])
-                            .spawn()
-                            .expect("Invalid command");
-    let ecode = out.wait().expect("Ahh!!");
-    let exit_status = ecode.success();
-    println!("Exited {} ", exit_status);
-
-    // arguments!
-    
-    // DONE: read in command
-    // tokenize command (executable, argumentList, optional connectors)
-    // execute the command
-    // must be a REPL
-    // exit exists the shell
-    // # is a comment
-
+        let arguments = command_line.collect::<Vec<&str>>();
+        let mut out = Command::new(command)
+            .args(&arguments[..])
+            .spawn()
+            .expect("Invalid command");
+        let ecode = out.wait().expect("Ahh!!");
+        let exit_status = ecode.success();
+        println!("Exited {} ", exit_status);
+    }
 }
