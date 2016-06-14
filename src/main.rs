@@ -18,36 +18,44 @@ use std::io::{stdin, stdout, Result, Write};
 use std::process::Command;
 
 fn main() {
-    // print the prompt to the user
-    print!("$ ");
+    print_disclaimer();
 
-    stdout().flush().ok();
+    'repl: loop {
+        print!("$ ");
 
-    let mut user_input = String::new();
+        stdout().flush().ok();
 
-    stdin().read_line(&mut user_input).expect("Failed to read line");
+        let mut user_input = String::new();
 
-    for statement in user_input.split(";") {
-        if let Err(e) = run_statement(statement) {
-            println!("Invalid command: {}", e);
+        stdin().read_line(&mut user_input).expect("Failed to read line");
+
+        for statement in user_input.split(";") {
+            if statement.trim() == "exit" {
+                println!("Goodbye!");
+                break 'repl;
+            }
+            if let Err(e) = run_statement(statement) {
+                println!("Invalid command: {}", e);
+            }
         }
     }
 }
 
-fn run_statement(statement: &str) -> io::Result<()> {
+fn run_statement(statement: &str) -> Result<()> {
     let mut command_line = statement.split_whitespace();
     let command = match command_line.next() {
-            Some(c) => c,
-            None    => return Ok(()),
-        };
+        Some(c) => c,
+        None    => return Ok(()),
+    };
     println!("command: {}", command);
 
     let arguments = command_line.collect::<Vec<&str>>();
     let mut out = try!(Command::new(command)
-        .args(&arguments[..])
-        .spawn());
+                       .args(&arguments[..])
+                       .spawn());
 
     let ecode = try!(out.wait());
+
     let exit_status = ecode.success();
     println!("Exited {} ", exit_status);
 
