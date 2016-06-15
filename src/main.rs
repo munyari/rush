@@ -20,14 +20,21 @@ use std::process::Command;
 fn main() {
     print_disclaimer();
 
-    'repl: loop {
-        print!("$ ");
+    start_shell();
+}
 
-        stdout().flush().ok();
+fn start_shell() {
+    'repl: loop {
+        print_prompt();
 
         let mut user_input = String::new();
 
-        stdin().read_line(&mut user_input).expect("Failed to read line");
+        match stdin().read_line(&mut user_input) {
+            // EOF case
+            Ok(0) => break,
+            Ok(_) => (),
+            Err(e) => println!("Error: {}. Exiting", e),
+        };
 
         for statement in user_input.split(";") {
             if statement.trim() == "exit" {
@@ -39,6 +46,10 @@ fn main() {
             }
         }
     }
+}
+fn print_prompt() {
+    print!("$ ");
+    stdout().flush().ok();
 }
 
 fn run_statement(statement: &str) -> Result<()> {
@@ -62,7 +73,7 @@ fn run_statement(statement: &str) -> Result<()> {
     Ok(())
 }
 
-fn print_disclaimer() {
+fn print_disclaimer() -> () {
     let disclaimer = "Rush -  Copyright (C) 2016  Panashe M. Fundira \
     \nThis program comes with ABSOLUTELY NO WARRANTY; for details type `show w'. \
     \nThis is free software, and you are welcome to redistribute it \
