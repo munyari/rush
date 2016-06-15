@@ -2,5 +2,13 @@
 name = "rush"
 version = "0.0.0"
 authors = ["Panashe M. Fundira <fundirap@gmail.com>"]
+description = "The Rust shell"
+repository = "https://github.com/munyari/rush"
+readme = "README.md"
+keywords = ["shell"]
+license = "GPLv3"
+
+[[bin]]
+name = "rush"
 
 [dependencies]
