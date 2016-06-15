@@ -80,3 +80,18 @@ fn print_disclaimer() -> () {
     \nunder certain conditions; type `show c' for details.";
     println!("{}", disclaimer);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{get_prompt, exit_message};
+
+    #[test]
+    fn test_get_prompt() {
+        assert_eq!("$ ", get_prompt());
+    }
+
+    #[test]
+    fn test_exit_message() {
+        assert_eq!("Goodbye!", exit_message());
+    }
+}
