@@ -14,8 +14,10 @@
 //     You should have received a copy of the GNU General Public License
 //     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::io::{stdin, stdout, Result, Write};
+use std::io::Result;
 use std::process::Command;
+extern crate readline;
+use readline::Error::*;
 
 fn main() {
     print_disclaimer();
@@ -25,20 +27,19 @@ fn main() {
 
 fn start_shell() {
     'repl: loop {
-        print_prompt();
-
-        let mut user_input = String::new();
-
-        match stdin().read_line(&mut user_input) {
-            // EOF case
-            Ok(0) => break,
-            Ok(_) => (),
-            Err(e) => println!("Error: {}. Exiting", e),
+        let user_input = match readline::readline(get_prompt()) {
+            Err(InvalidUtf8) => {
+                println!("Input is not valid UTF8");
+                continue;
+            }
+            Err(EndOfFile)   => break,
+            Err(e)           => panic!("Error {}", e),
+            Ok(s)            => s,
         };
 
         for statement in user_input.split(";") {
             if statement.trim() == "exit" {
-                println!("Goodbye!");
+                println!("{}", exit_message());
                 break 'repl;
             }
             if let Err(e) = run_statement(statement) {
@@ -47,9 +48,14 @@ fn start_shell() {
         }
     }
 }
-fn print_prompt() {
-    print!("$ ");
-    stdout().flush().ok();
+
+
+fn get_prompt() -> &'static str {
+    "$ "
+}
+
+fn exit_message() -> &'static str {
+    "Goodbye!"
 }
 
 fn run_statement(statement: &str) -> Result<()> {

@@ -12,3 +12,4 @@ license = "GPLv3"
 name = "rush"
 
 [dependencies]
+readline = "0.0.12"
