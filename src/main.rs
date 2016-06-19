@@ -13,10 +13,12 @@
 
 //     You should have received a copy of the GNU General Public License
 //     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#[macro_use]
+extern crate nom;
+extern crate readline;
 
 use std::io::Result;
 use std::process::Command;
-extern crate readline;
 use readline::Error::*;
 
 fn main() {
