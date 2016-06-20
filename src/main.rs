@@ -17,6 +17,8 @@
 extern crate nom;
 extern crate readline;
 
+use nom::*;
+
 use std::io::Result;
 use std::process::Command;
 use readline::Error::*;
@@ -88,6 +90,34 @@ fn print_disclaimer() -> () {
     \nunder certain conditions; type `show c' for details.";
     println!("{}", disclaimer);
 }
+
+named!(statement_terminator, is_a!(";"));
+named!(end_of_statement, alt!(line_ending | statement_terminator));
+named!(executable, alt!(alphanumeric | is_a!("_")));
+named!(arguments, delimited!(
+        alt!(tag!("-") | tag!("--")),
+        alphanumeric,
+        opt!(multispace)));
+named!(connective, alt!(tag!("&&") | tag!("||")));
+named!(empty, chain!(
+        acc: alt!(
+                    tag!("") | multispace
+                ) ~
+            end_of_statement,
+            || { return acc }
+            )
+    );
+named!(statement, alt!(empty |
+                   chain!(
+                        acc: executable ~
+                        opt!(arguments) ~
+                        opt!(connective) ~
+                        opt!(statement) ~
+                        end_of_statement,
+                    || { return acc }
+                    )
+                   )
+       );
 
 #[cfg(test)]
 mod tests {
