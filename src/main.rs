@@ -30,8 +30,11 @@ fn main() {
 }
 
 fn start_shell() {
+
+    let mut return_status: Result<()> = Ok(());
+
     'repl: loop {
-        let user_input = match readline::readline(get_prompt()) {
+        let user_input = match readline::readline(get_prompt(&return_status)) {
             Err(InvalidUtf8) => {
                 println!("Input is not valid UTF8");
                 continue;
@@ -46,7 +49,8 @@ fn start_shell() {
                 println!("{}", exit_message());
                 break 'repl;
             }
-            if let Err(e) = run_statement(statement) {
+            return_status = run_statement(statement);
+            if let Err(ref e) = return_status {
                 println!("Invalid command: {}", e);
             }
         }
@@ -54,8 +58,14 @@ fn start_shell() {
 }
 
 
-fn get_prompt() -> &'static str {
-    "$ "
+fn get_prompt(return_status: &Result<()>) -> &'static str {
+    const ERROR_PROMPT: &'static str =  "[0m[01;31m$[0m "; // our prompt is red
+    const NORMAL_PROMPT: &'static str = "$ ";
+
+    match *return_status {
+        Ok(()) => NORMAL_PROMPT,
+        _ => ERROR_PROMPT,
+    }
 }
 
 fn exit_message() -> &'static str {
@@ -68,18 +78,22 @@ fn run_statement(statement: &str) -> Result<()> {
         Some(c) => c,
         None    => return Ok(()),
     };
-    println!("command: {}", command);
 
+    // TODO: wrong arguments don't pass error
     let arguments = command_line.collect::<Vec<&str>>();
-    let mut out = try!(Command::new(command)
+    let mut out = Command::new(command)
                        .args(&arguments[..])
-                       .spawn());
+                       .spawn();
 
-    let ecode = try!(out.wait());
+    match out {
+        Err(e) => return Err(e),
+        _ => (),
+    };
 
-    let exit_status = ecode.success();
-    println!("Exited {} ", exit_status);
+    // we wait until the command has exited before proceeding
+    try!(out.unwrap().wait());
 
+    // command has successfuly executed
     Ok(())
 }
 
