@@ -23,6 +23,8 @@ use std::io::Result;
 use std::process::Command;
 use readline::Error::*;
 
+use std::str::from_utf8;
+
 fn main() {
     print_disclaimer();
 
@@ -44,6 +46,7 @@ fn start_shell() {
             Ok(s)            => s,
         };
 
+        // TODO: parsing logic
         for statement in user_input.split(";") {
             if statement.trim() == "exit" {
                 println!("{}", exit_message());
@@ -82,8 +85,8 @@ fn run_statement(statement: &str) -> Result<()> {
     // TODO: wrong arguments don't pass error
     let arguments = command_line.collect::<Vec<&str>>();
     let mut out = Command::new(command)
-                       .args(&arguments[..])
-                       .spawn();
+        .args(&arguments[..])
+        .spawn();
 
     match out {
         Err(e) => return Err(e),
@@ -105,45 +108,112 @@ fn print_disclaimer() -> () {
     println!("{}", disclaimer);
 }
 
-named!(statement_terminator, is_a!(";"));
+named!(statement_terminator <&[u8]>, is_a!(";"));
 named!(end_of_statement, alt!(line_ending | statement_terminator));
-named!(executable, alt!(alphanumeric | is_a!("_")));
-named!(arguments, delimited!(
-        alt!(tag!("-") | tag!("--")),
-        alphanumeric,
-        opt!(multispace)));
+
+fn alpha_or_underscore_or_dash(c: u8) -> bool {
+    // OR dash
+    c as char == '_' || (c as char).is_alphanum() || (c as char) == '-'
+}
+named!(executable, take_while1!(alpha_or_underscore_or_dash));
+named!(dashes_p, alt!(tag!("-") | tag!("--") ));
+// TODO: refactor!
+named!(arguments<String>, chain!(
+        dashes: dashes_p ~ 
+        inner_arg: executable,
+        || { 
+            let mut s1 = from_utf8(dashes).unwrap().to_string();
+            s1.push_str(from_utf8(inner_arg).unwrap());
+            s1
+        }
+        ));
 named!(connective, alt!(tag!("&&") | tag!("||")));
 named!(empty, chain!(
         acc: alt!(
-                    tag!("") | multispace
-                ) ~
-            end_of_statement,
-            || { return acc }
-            )
-    );
+            tag!("") | multispace
+            ) ~
+        end_of_statement,
+        || { return acc }
+        )
+      );
 named!(statement, alt!(empty |
-                   chain!(
-                        acc: executable ~
-                        opt!(arguments) ~
-                        opt!(connective) ~
-                        opt!(statement) ~
-                        end_of_statement,
-                    || { return acc }
-                    )
-                   )
-       );
+                       chain!(
+                           acc: executable ~
+                           opt!(arguments) ~
+                           opt!(connective) ~
+                           opt!(statement) ~
+                           end_of_statement,
+                           || { return acc }
+                           )
+                      )
+      );
 
 #[cfg(test)]
 mod tests {
-    use super::{get_prompt, exit_message};
+    use super::{get_prompt, exit_message, statement_terminator, end_of_statement, executable};
+    // use std::io::{Error, ErrorKind};
+    use std::*;
+    use nom::IResult::*;
+    use nom::Err::Position;
+    use nom::ErrorKind::{IsA,TakeWhile1};
+
+    const ERROR_PROMPT: &'static str =  "[0m[01;31m$[0m "; // our prompt is red
+    const NORMAL_PROMPT: &'static str = "$ ";
 
     #[test]
-    fn test_get_prompt() {
-        assert_eq!("$ ", get_prompt());
+    fn test_prompt_on_successful_exit() {
+        assert_eq!(NORMAL_PROMPT, get_prompt(&Ok(())));
+    }
+
+    #[test]
+    fn test_prompt_on_unsuccessful_exit() {
+        assert_eq!(ERROR_PROMPT,
+                   get_prompt(
+                       &Err(
+                           io::Error::new(io::ErrorKind::Other, "oh no!")
+                           )
+                       )
+                  );
     }
 
     #[test]
     fn test_exit_message() {
         assert_eq!("Goodbye!", exit_message());
+    }
+
+
+    // parser tests
+    #[test]
+    fn test_statement_terminator_parser() {
+        assert_eq!(statement_terminator(&b";"[..]),
+        Done(&b""[..], &b";"[..]));
+
+        // on garbage
+        assert_eq!(statement_terminator(&b" "[..]),
+        Error(Position(IsA, &b" "[..])));
+    }
+
+    #[test]
+    fn test_end_of_statement_parser() {
+        assert_eq!(end_of_statement(&b";"[..]),
+        Done(&b""[..], &b";"[..]));
+
+        assert_eq!(end_of_statement(&b"\n"[..]),
+        Done(&b""[..], &b"\n"[..]));
+
+        assert_eq!(statement_terminator(&b" "[..]),
+        Error(Position(IsA, &b" "[..])));
+    }
+
+    #[test]
+    fn test_executable_parser() {
+        assert_eq!(executable(&b"nvim"[..]),
+        Done(&b""[..], &b"nvim"[..]));
+
+        assert_eq!(executable(&b"_this_is_perfectly_valid_"[..]),
+        Done(&b""[..], &b"_this_is_perfectly_valid_"[..]));
+
+        assert_eq!(executable(&b" "[..]),
+        Error(Position(TakeWhile1, &b" "[..])));
     }
 }
