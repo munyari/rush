@@ -118,7 +118,7 @@ fn alpha_or_underscore_or_dash(c: u8) -> bool {
 named!(executable, take_while1!(alpha_or_underscore_or_dash));
 named!(dashes_p, alt!(tag!("-") | tag!("--") ));
 // TODO: refactor!
-named!(arguments<String>, chain!(
+named!(argument<String>, chain!(
         dashes: dashes_p ~
         inner_arg: executable,
         || {
@@ -127,6 +127,7 @@ named!(arguments<String>, chain!(
             s1
         }
         ));
+named!(arguments<std::vec::Vec<String> >, many0!(argument));
 named!(connective, alt!(tag!("&&") | tag!("||")));
 
 // used space here because multispace recognizes line feeds
@@ -136,21 +137,31 @@ named!(empty, chain!(
         )
       );
 
-named!(statement, alt!(empty |
-                       chain!(
-                           acc: executable ~
-                           opt!(arguments) ~
-                           opt!(connective) ~
-                           opt!(statement) ~
-                           end_of_statement,
-                           || { return acc }
-                           )
-                      )
+named!(statement<&[u8], (&str, std::vec::Vec<String>)>,
+    chain!(
+        ex: executable? ~
+        // TODO: should I have nested chains?
+        space? ~
+        args: arguments? ~
+        space? ~
+        end_of_statement,
+        || { 
+            match ex {
+                Some(v) => (from_utf8(v).unwrap_or(""), args.unwrap_or(vec![])),
+                None => ("", args.unwrap_or(vec![])),
+            }
+        }
+
+        )
+
       );
+
+named!(compound_statement, alt!(chain!(statement ~ connective ~ statement,
+                                       || { &b""[..] })));
 
 #[cfg(test)]
 mod tests {
-    use super::{get_prompt, exit_message, statement_terminator, end_of_statement, executable, arguments, connective,empty,statement};
+    use super::{get_prompt, exit_message, statement_terminator, end_of_statement, executable, argument, connective,empty,statement};
     // use std::io::{Error, ErrorKind};
     use std::*;
     use nom::IResult::*;
@@ -219,14 +230,14 @@ mod tests {
     }
 
     #[test]
-    fn test_arguments_parser() {
-        assert_eq!(arguments(&b"--color"[..]),
+    fn test_argument() {
+        assert_eq!(argument(&b"--color"[..]),
             Done(&b""[..], "--color".to_string()));
 
-        assert_eq!(arguments(&b"-a"[..]),
+        assert_eq!(argument(&b"-a"[..]),
             Done(&b""[..], "-a".to_string()));
 
-        assert_eq!(arguments(&b"a"[..]),
+        assert_eq!(argument(&b"a"[..]),
             Error(Position(Alt, &b"a"[..])));
     }
 
@@ -270,9 +281,15 @@ mod tests {
             Error(Position(Alt, &b"I'm definitely not empty"[..])));
     }
 
-    // #[test]
-    // fn test_statement_parser() {
-    //     assert_eq!(statement(&b"ls --color"[..]),
-    //         Done(&b""[..], &b""[..]));
-    // }
+    #[test]
+    fn test_statement_parser() {
+        assert_eq!(statement(&b"\n"[..]),
+            Done(&b""[..], ("", vec![])));
+
+        assert_eq!(statement(&b"ls --color\n"[..]),
+            Done(&b""[..], ("ls", vec!["--color".to_string()])));
+
+        assert_eq!(statement(&b"ls -a\n"[..]),
+            Done(&b""[..], ("ls", vec!["-a".to_string()])));
+    }
 }
