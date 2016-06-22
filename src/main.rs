@@ -84,7 +84,7 @@ fn run_statement(statement: &str) -> Result<()> {
 
     // TODO: wrong arguments don't pass error
     let arguments = command_line.collect::<Vec<&str>>();
-    let mut out = Command::new(command)
+    let out = Command::new(command)
         .args(&arguments[..])
         .spawn();
 
@@ -119,23 +119,23 @@ named!(executable, take_while1!(alpha_or_underscore_or_dash));
 named!(dashes_p, alt!(tag!("-") | tag!("--") ));
 // TODO: refactor!
 named!(arguments<String>, chain!(
-        dashes: dashes_p ~ 
+        dashes: dashes_p ~
         inner_arg: executable,
-        || { 
+        || {
             let mut s1 = from_utf8(dashes).unwrap().to_string();
             s1.push_str(from_utf8(inner_arg).unwrap());
             s1
         }
         ));
 named!(connective, alt!(tag!("&&") | tag!("||")));
+
+// used space here because multispace recognizes line feeds
 named!(empty, chain!(
-        acc: alt!(
-            tag!("") | multispace
-            ) ~
-        end_of_statement,
-        || { return acc }
+        space? ~ end_of_statement,
+        || { &b""[..] }
         )
       );
+
 named!(statement, alt!(empty |
                        chain!(
                            acc: executable ~
@@ -150,12 +150,13 @@ named!(statement, alt!(empty |
 
 #[cfg(test)]
 mod tests {
-    use super::{get_prompt, exit_message, statement_terminator, end_of_statement, executable};
+    use super::{get_prompt, exit_message, statement_terminator, end_of_statement, executable, arguments, connective,empty,statement};
     // use std::io::{Error, ErrorKind};
     use std::*;
     use nom::IResult::*;
     use nom::Err::Position;
-    use nom::ErrorKind::{IsA,TakeWhile1};
+    use nom::ErrorKind::{IsA,TakeWhile1,Alt};
+    use nom::Needed;
 
     const ERROR_PROMPT: &'static str =  "[0m[01;31m$[0m "; // our prompt is red
     const NORMAL_PROMPT: &'static str = "$ ";
@@ -186,34 +187,92 @@ mod tests {
     #[test]
     fn test_statement_terminator_parser() {
         assert_eq!(statement_terminator(&b";"[..]),
-        Done(&b""[..], &b";"[..]));
+            Done(&b""[..], &b";"[..]));
 
         // on garbage
         assert_eq!(statement_terminator(&b" "[..]),
-        Error(Position(IsA, &b" "[..])));
+            Error(Position(IsA, &b" "[..])));
     }
 
     #[test]
     fn test_end_of_statement_parser() {
         assert_eq!(end_of_statement(&b";"[..]),
-        Done(&b""[..], &b";"[..]));
+            Done(&b""[..], &b";"[..]));
 
         assert_eq!(end_of_statement(&b"\n"[..]),
-        Done(&b""[..], &b"\n"[..]));
+            Done(&b""[..], &b"\n"[..]));
 
         assert_eq!(statement_terminator(&b" "[..]),
-        Error(Position(IsA, &b" "[..])));
+            Error(Position(IsA, &b" "[..])));
     }
 
     #[test]
     fn test_executable_parser() {
         assert_eq!(executable(&b"nvim"[..]),
-        Done(&b""[..], &b"nvim"[..]));
+            Done(&b""[..], &b"nvim"[..]));
 
         assert_eq!(executable(&b"_this_is_perfectly_valid_"[..]),
-        Done(&b""[..], &b"_this_is_perfectly_valid_"[..]));
+            Done(&b""[..], &b"_this_is_perfectly_valid_"[..]));
 
         assert_eq!(executable(&b" "[..]),
-        Error(Position(TakeWhile1, &b" "[..])));
+            Error(Position(TakeWhile1, &b" "[..])));
     }
+
+    #[test]
+    fn test_arguments_parser() {
+        assert_eq!(arguments(&b"--color"[..]),
+            Done(&b""[..], "--color".to_string()));
+
+        assert_eq!(arguments(&b"-a"[..]),
+            Done(&b""[..], "-a".to_string()));
+
+        assert_eq!(arguments(&b"a"[..]),
+            Error(Position(Alt, &b"a"[..])));
+    }
+
+    #[test]
+    fn test_connective_parser() {
+        assert_eq!(connective(&b"&&"[..]),
+            Done(&b""[..], &b"&&"[..]));
+
+        assert_eq!(connective(&b"||"[..]),
+            Done(&b""[..], &b"||"[..]));
+
+        assert_eq!(connective(&b""[..]),
+            Incomplete(Needed::Size(2)));
+
+        assert_eq!(connective(&b"I'm not valid!"[..]),
+            Error(Position(Alt, &b"I'm not valid!"[..])));
+
+    }
+
+    #[test]
+    fn test_empty_parser() {
+        assert_eq!(empty(&b"\n"[..]),
+            Done(&b""[..], &b""[..]));
+
+        assert_eq!(empty(&b"  \n"[..]),
+            Done(&b""[..], &b""[..]));
+
+        assert_eq!(empty(&b"\t\n"[..]),
+            Done(&b""[..], &b""[..]));
+
+        assert_eq!(empty(&b";"[..]),
+            Done(&b""[..], &b""[..]));
+
+        assert_eq!(empty(&b"  ;"[..]),
+            Done(&b""[..], &b""[..]));
+
+        assert_eq!(empty(&b"\t;"[..]),
+            Done(&b""[..], &b""[..]));
+
+        assert_eq!(empty(&b"I'm definitely not empty"[..]),
+            Error(Position(Alt, &b"I'm definitely not empty"[..])));
+    }
+
+    // #[test]
+    // fn test_statement_parser() {
+    //     assert_eq!(statement(&b"ls --color"[..]),
+    //         Done(&b""[..], &b""[..]));
+    // }
 }
