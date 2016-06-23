@@ -23,8 +23,6 @@ use std::io::Result;
 use std::process::Command;
 use readline::Error::*;
 
-use std::str::from_utf8;
-
 fn main() {
     print_disclaimer();
 
@@ -108,56 +106,51 @@ fn print_disclaimer() -> () {
     println!("{}", disclaimer);
 }
 
-named!(statement_terminator <&[u8]>, is_a!(";"));
-named!(end_of_statement, alt!(line_ending | statement_terminator));
-
-fn alpha_or_underscore_or_dash(c: u8) -> bool {
-    // OR dash
-    c as char == '_' || (c as char).is_alphanum() || (c as char) == '-'
+// helper parsers
+named!(end_of_line<&str, &str>, tag_s!("\n"));
+fn alpha_or_underscore_or_dash(c: char) -> bool {
+    c == '_' || c == '-' || c.is_alphanum()
 }
-named!(executable, take_while1!(alpha_or_underscore_or_dash));
-named!(dashes_p, alt!(tag!("-") | tag!("--") ));
-// TODO: refactor!
-named!(argument<String>, chain!(
-        dashes: dashes_p ~
-        inner_arg: executable,
-        || {
-            let mut s1 = from_utf8(dashes).unwrap().to_string();
-            s1.push_str(from_utf8(inner_arg).unwrap());
-            s1
-        }
-        ));
-named!(arguments<std::vec::Vec<String> >, many0!(argument));
-named!(connective, alt!(tag!("&&") | tag!("||")));
+fn is_whitespace(c: char) -> bool {
+    c == ' ' || c == '\t'
+}
+named!(whitespace<&str, &str>, take_while1_s!(is_whitespace));
 
-// used space here because multispace recognizes line feeds
-named!(empty, chain!(
-        space? ~ end_of_statement,
-        || { &b""[..] }
+// DOING NOW: convert everything to work with String
+
+named!(statement_terminator<&str, &str>, is_a_s!(";"));
+named!(end_of_statement<&str, &str>, 
+           alt!(end_of_line | statement_terminator));
+
+named!(executable<&str, &str>, take_while1_s!(alpha_or_underscore_or_dash));
+named!(argument<&str, &str>, take_while1_s!(alpha_or_underscore_or_dash));
+named!(arguments<&str, std::vec::Vec<&str> >, many0!(argument));
+named!(and<&str, &str>, tag_s!("&&"));
+named!(or<&str, &str>, tag_s!("||"));
+named!(connective<&str, &str>, alt!(and | or));
+
+// // used space here because multispace recognizes line feeds
+named!(empty<&str, &str>, chain!(
+        whitespace? ~ end_of_statement,
+        || { "" }
         )
       );
 
-named!(statement<&[u8], (&str, std::vec::Vec<String>)>,
+named!(statement<&str, (&str, std::vec::Vec<&str>)>,
     chain!(
         ex: executable? ~
-        // TODO: should I have nested chains?
-        space? ~
+        whitespace? ~
         args: arguments? ~
-        space? ~
+        whitespace? ~
         end_of_statement,
         || { 
-            match ex {
-                Some(v) => (from_utf8(v).unwrap_or(""), args.unwrap_or(vec![])),
-                None => ("", args.unwrap_or(vec![])),
-            }
+            (ex.unwrap_or(""), args.unwrap_or((vec![])))
         }
+    )
+);
 
-        )
-
-      );
-
-named!(compound_statement, alt!(chain!(statement ~ connective ~ statement,
-                                       || { &b""[..] })));
+// named!(compound_statement, alt!(chain!(statement ~ connective ~ statement,
+//                                        || { &b""[..] })));
 
 #[cfg(test)]
 mod tests {
@@ -196,100 +189,87 @@ mod tests {
     // parser tests
     #[test]
     fn test_statement_terminator_parser() {
-        assert_eq!(super::statement_terminator(&b";"[..]),
-            Done(&b""[..], &b";"[..]));
+        assert_eq!(super::statement_terminator(";"), Done("", ";"));
 
-        // on garbage
-        assert_eq!(super::statement_terminator(&b" "[..]),
-            Error(Position(IsA, &b" "[..])));
+        assert_eq!(super::statement_terminator(" "), 
+                   Error(Position(IsAStr, " ")));
     }
 
     #[test]
     fn test_end_of_statement_parser() {
-        assert_eq!(super::end_of_statement(&b";"[..]),
-            Done(&b""[..], &b";"[..]));
+        assert_eq!(super::end_of_statement(";"), Done("", ";"));
 
-        assert_eq!(super::end_of_statement(&b"\n"[..]),
-            Done(&b""[..], &b"\n"[..]));
+        assert_eq!(super::end_of_statement("\n"), Done("", "\n"));
 
-        assert_eq!(super::statement_terminator(&b" "[..]),
-            Error(Position(IsA, &b" "[..])));
+        assert_eq!(super::statement_terminator(" "), 
+                   Error(Position(IsAStr, " ")));
     }
 
     #[test]
     fn test_executable_parser() {
-        assert_eq!(super::executable(&b"nvim"[..]),
-            Done(&b""[..], &b"nvim"[..]));
+        assert_eq!(super::executable("nvim"), Done("", "nvim"));
 
-        assert_eq!(super::executable(&b"_this_is_perfectly_valid_"[..]),
-            Done(&b""[..], &b"_this_is_perfectly_valid_"[..]));
+        assert_eq!(super::executable("_this_is_perfectly_valid_"), 
+                   Done("", "_this_is_perfectly_valid_"));
 
-        assert_eq!(super::executable(&b" "[..]),
-            Error(Position(TakeWhile1, &b" "[..])));
+        assert_eq!(super::executable(" "), 
+                   Error(Position(TakeWhile1Str, " ")));
     }
 
     #[test]
     fn test_argument() {
-        assert_eq!(super::argument(&b"--color"[..]),
-            Done(&b""[..], "--color".to_string()));
+        assert_eq!(super::argument("--color"), Done("", "--color"));
 
-        assert_eq!(super::argument(&b"-a"[..]),
-            Done(&b""[..], "-a".to_string()));
+        assert_eq!(super::argument("-a"), Done("", "-a"));
 
-        assert_eq!(super::argument(&b"a"[..]),
-            Error(Position(Alt, &b"a"[..])));
+        assert_eq!(super::argument("a"), Done("", "a"));
+
+        assert_eq!(super::argument("This_is_a_valid_argument"), 
+                   Done("", "This_is_a_valid_argument"));
+
+        assert_eq!(super::argument("Only the first word is an argument"), 
+                   Done(" the first word is an argument", "Only"));
     }
 
     #[test]
     fn test_connective_parser() {
-        assert_eq!(super::connective(&b"&&"[..]),
-            Done(&b""[..], &b"&&"[..]));
+        assert_eq!(super::connective("&&"), Done("", "&&"));
 
-        assert_eq!(super::connective(&b"||"[..]),
-            Done(&b""[..], &b"||"[..]));
+        assert_eq!(super::connective("||"), Done("", "||"));
 
-        assert_eq!(super::connective(&b""[..]),
-            Incomplete(Needed::Size(2)));
+        assert_eq!(super::connective(""), Incomplete(Needed::Size(2)));
 
-        assert_eq!(super::connective(&b"I'm not valid!"[..]),
-            Error(Position(Alt, &b"I'm not valid!"[..])));
+        assert_eq!(super::connective("I'm not valid!"), 
+                   Error(Position(Alt, "I'm not valid!")));
 
     }
 
     #[test]
     fn test_empty_parser() {
-        assert_eq!(super::empty(&b"\n"[..]),
-            Done(&b""[..], &b""[..]));
+        assert_eq!(super::empty("\n"), Done("", ""));
 
-        assert_eq!(super::empty(&b"  \n"[..]),
-            Done(&b""[..], &b""[..]));
+        assert_eq!(super::empty("  \n"), Done("", ""));
 
-        assert_eq!(super::empty(&b"\t\n"[..]),
-            Done(&b""[..], &b""[..]));
+        assert_eq!(super::empty("\t\n"), Done("", ""));
 
-        assert_eq!(super::empty(&b";"[..]),
-            Done(&b""[..], &b""[..]));
+        assert_eq!(super::empty(";"), Done("", ""));
 
-        assert_eq!(super::empty(&b"  ;"[..]),
-            Done(&b""[..], &b""[..]));
+        assert_eq!(super::empty("  ;"), Done("", ""));
 
-        assert_eq!(super::empty(&b"\t;"[..]),
-            Done(&b""[..], &b""[..]));
+        assert_eq!(super::empty("\t;"), Done("", ""));
 
-        assert_eq!(super::empty(&b"I'm definitely not empty"[..]),
-            Error(Position(Alt, &b"I'm definitely not empty"[..])));
+        assert_eq!(super::empty("I'm definitely not empty"), 
+                   Error(Position(Alt, "I'm definitely not empty")));
     }
 
     #[test]
     fn test_statement_parser() {
-        assert_eq!(super::statement(&b"\n"[..]),
-            Done(&b""[..], ("", vec![])));
+        assert_eq!(super::statement("\n"), Done("", ("", vec![])));
 
-        assert_eq!(super::statement(&b"ls --color\n"[..]),
-            Done(&b""[..], ("ls", vec!["--color".to_string()])));
+        assert_eq!(super::statement("ls --color\n"), 
+                   Done("", ("ls", vec!["--color"])));
 
-        assert_eq!(super::statement(&b"ls -a\n"[..]),
-            Done(&b""[..], ("ls", vec!["-a".to_string()])));
+        assert_eq!(super::statement("ls -a\n"), Done("", ("ls", vec!["-a"])));
 
     }
 }
