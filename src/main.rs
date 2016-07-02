@@ -44,18 +44,30 @@ fn start_shell() {
             Ok(s)            => s,
         };
 
-        // TODO: parsing logic
-        for statement in user_input.split(";") {
-            if statement.trim() == "exit" {
-                println!("{}", exit_message());
-                break 'repl;
-            }
-            return_status = run_statement(statement);
-            if let Err(ref e) = return_status {
-                println!("Invalid command: {}", e);
-            }
-        }
+        let commands = parse_commands(&user_input);
+        eval_tree(commands);
+
+        // // TODO: parsing logic
+        // for statement in user_input.split(";") {
+        //     if statement.trim() == "exit" {
+        //         println!("{}", exit_message());
+        //         break 'repl;
+        //     }
+        //     return_status = run_statement(statement);
+        //     if let Err(ref e) = return_status {
+        //         println!("Invalid command: {}", e);
+        //     }
+        // }
+
     }
+}
+
+fn parse_commands(input: &str) -> Vec<ShellCommand> {
+    vec![ShellCommand::SimpleStatement("",vec![""])]
+}
+
+fn eval_tree(commands: Vec<ShellCommand>) -> () {
+
 }
 
 
@@ -134,7 +146,7 @@ named!(empty<&str, &str>, chain!(
         )
       );
 
-named!(simple_statement<&str, ASTNode>,
+named!(simple_statement<&str, ShellCommand>,
     chain!(
         whitespace? ~
         ex: executable? ~
@@ -143,7 +155,7 @@ named!(simple_statement<&str, ASTNode>,
         whitespace? ~
         end_of_statement,
         || {
-            ASTNode::SimpleStatement(
+            ShellCommand::SimpleStatement(
                 (ex.unwrap_or("")), (args.unwrap_or((vec![])))
                 )
         }
@@ -152,30 +164,30 @@ named!(simple_statement<&str, ASTNode>,
 
 #[derive(Debug)]
 #[derive(PartialEq)]
-enum ASTNode<'a> {
-    And(Box<ASTNode<'a>>, Box<ASTNode<'a>>),
-    Or(Box<ASTNode<'a>>, Box<ASTNode<'a>>),
+enum ShellCommand<'a> {
+    And(Box<ShellCommand<'a>>, Box<ShellCommand<'a>>),
+    Or(Box<ShellCommand<'a>>, Box<ShellCommand<'a>>),
     SimpleStatement(&'a str, Vec<&'a str>),
-    Statements(Vec<&'a ASTNode<'a>>)
+    Statements(Vec<&'a ShellCommand<'a>>)
 }
 
 
-named!(statement<&str, ASTNode>, alt!(compound_statement | simple_statement));
-named!(and_statement<&str, ASTNode>, chain!(
+named!(statement<&str, ShellCommand>, alt!(compound_statement | simple_statement));
+named!(and_statement<&str, ShellCommand>, chain!(
         s1: statement ~
         and ~
         s2: statement,
-        || { ASTNode::And(Box::new(s1), Box::new(s2)) }
+        || { ShellCommand::And(Box::new(s1), Box::new(s2)) }
         )
     );
-named!(or_statement<&str, ASTNode>, chain!(
+named!(or_statement<&str, ShellCommand>, chain!(
         s1: statement ~
         or ~
         s2: statement,
-        || { ASTNode::Or(Box::new(s1), Box::new(s2)) }
+        || { ShellCommand::Or(Box::new(s1), Box::new(s2)) }
         )
     );
-named!(compound_statement<&str, ASTNode>, alt!(and_statement | or_statement));
+named!(compound_statement<&str, ShellCommand>, alt!(and_statement | or_statement));
 
 #[cfg(test)]
 mod tests {
@@ -270,16 +282,18 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_simple_statement_parser() {
         assert_eq!(super::simple_statement("\n"),
-           Done("", super::ASTNode::SimpleStatement("", vec![])));
+           Done("", super::ShellCommand::SimpleStatement("", vec![])));
         assert_eq!(super::simple_statement("ls --color\n"),
-           Done("", super::ASTNode::SimpleStatement("ls", vec!["--color"])));
+           Done("", super::ShellCommand::SimpleStatement("ls", vec!["--color"])));
         assert_eq!(super::simple_statement("ls -a\n"),
-           Done("", super::ASTNode::SimpleStatement("ls", vec!["-a"])));
+           Done("", super::ShellCommand::SimpleStatement("ls", vec!["-a"])));
     }
 
     #[test]
+    #[ignore]
     fn test_compound_statement_parser() {
         panic!()
     }
