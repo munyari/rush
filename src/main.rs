@@ -136,6 +136,7 @@ named!(empty<&str, &str>, chain!(
 
 named!(simple_statement<&str, ASTNode>,
     chain!(
+        whitespace? ~
         ex: executable? ~
         whitespace? ~
         args: arguments? ~
@@ -214,56 +215,44 @@ mod tests {
     #[test]
     fn test_statement_terminator_parser() {
         assert_eq!(super::statement_terminator(";"), Done("", ";"));
-
-        assert_eq!(super::statement_terminator(" "), 
+        assert_eq!(super::statement_terminator(" "),
                    Error(Position(IsAStr, " ")));
     }
 
     #[test]
     fn test_end_of_statement_parser() {
         assert_eq!(super::end_of_statement(";"), Done("", ";"));
-
         assert_eq!(super::end_of_statement("\n"), Done("", "\n"));
-
-        assert_eq!(super::statement_terminator(" "), 
+        assert_eq!(super::statement_terminator(" "),
                    Error(Position(IsAStr, " ")));
     }
 
     #[test]
     fn test_executable_parser() {
         assert_eq!(super::executable("nvim"), Done("", "nvim"));
-
-        assert_eq!(super::executable("_this_is_perfectly_valid_"), 
+        assert_eq!(super::executable("_this_is_perfectly_valid_"),
                    Done("", "_this_is_perfectly_valid_"));
-
-        assert_eq!(super::executable(" "), 
+        assert_eq!(super::executable(" "),
                    Error(Position(TakeWhile1Str, " ")));
     }
 
     #[test]
     fn test_argument() {
         assert_eq!(super::argument("--color"), Done("", "--color"));
-
         assert_eq!(super::argument("-a"), Done("", "-a"));
-
         assert_eq!(super::argument("a"), Done("", "a"));
-
-        assert_eq!(super::argument("This_is_a_valid_argument"), 
+        assert_eq!(super::argument("This_is_a_valid_argument"),
                    Done("", "This_is_a_valid_argument"));
-
-        assert_eq!(super::argument("Only the first word is an argument"), 
+        assert_eq!(super::argument("Only the first word is an argument"),
                    Done(" the first word is an argument", "Only"));
     }
 
     #[test]
     fn test_connective_parser() {
         assert_eq!(super::connective("&&"), Done("", "&&"));
-
         assert_eq!(super::connective("||"), Done("", "||"));
-
         assert_eq!(super::connective(""), Incomplete(Needed::Size(2)));
-
-        assert_eq!(super::connective("I'm not valid!"), 
+        assert_eq!(super::connective("I'm not valid!"),
                    Error(Position(Alt, "I'm not valid!")));
 
     }
@@ -271,29 +260,46 @@ mod tests {
     #[test]
     fn test_empty_parser() {
         assert_eq!(super::empty("\n"), Done("", ""));
-
         assert_eq!(super::empty("  \n"), Done("", ""));
-
         assert_eq!(super::empty("\t\n"), Done("", ""));
-
         assert_eq!(super::empty(";"), Done("", ""));
-
         assert_eq!(super::empty("  ;"), Done("", ""));
-
         assert_eq!(super::empty("\t;"), Done("", ""));
-
-        assert_eq!(super::empty("I'm definitely not empty"), 
+        assert_eq!(super::empty("I'm definitely not empty"),
                    Error(Position(Alt, "I'm definitely not empty")));
     }
 
     #[test]
-    fn test_statement_parser() {
-        assert_eq!(super::statement("\n"), Done("", ("", vec![])));
-
-        assert_eq!(super::statement("ls --color\n"), 
-                   Done("", ("ls", vec!["--color"])));
-
-        assert_eq!(super::statement("ls -a\n"), Done("", ("ls", vec!["-a"])));
-
+    fn test_simple_statement_parser() {
+        assert_eq!(super::simple_statement("\n"),
+           Done("", super::ASTNode::SimpleStatement("", vec![])));
+        assert_eq!(super::simple_statement("ls --color\n"),
+           Done("", super::ASTNode::SimpleStatement("ls", vec!["--color"])));
+        assert_eq!(super::simple_statement("ls -a\n"),
+           Done("", super::ASTNode::SimpleStatement("ls", vec!["-a"])));
     }
+
+    #[test]
+    fn test_compound_statement_parser() {
+        panic!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_or_statement_parser() {
+        panic!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_and_statement_parser() {
+        panic!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_multiple_statement_parser() {
+        panic!()
+    }
+
 }
