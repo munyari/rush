@@ -116,10 +116,8 @@ fn is_whitespace(c: char) -> bool {
 }
 named!(whitespace<&str, &str>, take_while1_s!(is_whitespace));
 
-// DOING NOW: convert everything to work with String
-
 named!(statement_terminator<&str, &str>, is_a_s!(";"));
-named!(end_of_statement<&str, &str>, 
+named!(end_of_statement<&str, &str>,
            alt!(end_of_line | statement_terminator));
 
 named!(executable<&str, &str>, take_while1_s!(alpha_or_underscore_or_dash));
@@ -136,21 +134,47 @@ named!(empty<&str, &str>, chain!(
         )
       );
 
-named!(statement<&str, (&str, std::vec::Vec<&str>)>,
+named!(simple_statement<&str, ASTNode>,
     chain!(
         ex: executable? ~
         whitespace? ~
         args: arguments? ~
         whitespace? ~
         end_of_statement,
-        || { 
-            (ex.unwrap_or(""), args.unwrap_or((vec![])))
+        || {
+            ASTNode::SimpleStatement(
+                (ex.unwrap_or("")), (args.unwrap_or((vec![])))
+                )
         }
     )
 );
 
-// named!(compound_statement, alt!(chain!(statement ~ connective ~ statement,
-//                                        || { &b""[..] })));
+#[derive(Debug)]
+#[derive(PartialEq)]
+enum ASTNode<'a> {
+    And(Box<ASTNode<'a>>, Box<ASTNode<'a>>),
+    Or(Box<ASTNode<'a>>, Box<ASTNode<'a>>),
+    SimpleStatement(&'a str, Vec<&'a str>),
+    Statements(Vec<&'a ASTNode<'a>>)
+}
+
+
+named!(statement<&str, ASTNode>, alt!(compound_statement | simple_statement));
+named!(and_statement<&str, ASTNode>, chain!(
+        s1: statement ~
+        and ~
+        s2: statement,
+        || { ASTNode::And(Box::new(s1), Box::new(s2)) }
+        )
+    );
+named!(or_statement<&str, ASTNode>, chain!(
+        s1: statement ~
+        or ~
+        s2: statement,
+        || { ASTNode::Or(Box::new(s1), Box::new(s2)) }
+        )
+    );
+named!(compound_statement<&str, ASTNode>, alt!(and_statement | or_statement));
 
 #[cfg(test)]
 mod tests {
