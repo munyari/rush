@@ -44,30 +44,35 @@ fn start_shell() {
             Ok(s)            => s,
         };
 
-        let commands = parse_commands(&user_input);
-        eval_tree(commands);
+        // let statements = parse_statements(&user_input);
+        // eval_tree(statements);
 
-        // // TODO: parsing logic
-        // for statement in user_input.split(";") {
-        //     if statement.trim() == "exit" {
-        //         println!("{}", exit_message());
-        //         break 'repl;
-        //     }
-        //     return_status = run_statement(statement);
-        //     if let Err(ref e) = return_status {
-        //         println!("Invalid command: {}", e);
-        //     }
-        // }
+        // TODO: parsing logic
+        for statement in user_input.split(";") {
+            if statement.trim() == "exit" {
+                println!("{}", exit_message());
+                break 'repl;
+            }
+            return_status = run_statement(statement);
+            if let Err(ref e) = return_status {
+                println!("Invalid command: {}", e);
+            }
+        }
 
     }
 }
 
-fn parse_commands(input: &str) -> Vec<ShellCommand> {
-    vec![ShellCommand::SimpleStatement("",vec![""])]
+fn parse_statements(input: &str) -> Vec<Statement> {
+    match statement_list(input) {
+        IResult::Done(_, o) => o,
+        _ => vec![],
+    }
 }
 
-fn eval_tree(commands: Vec<ShellCommand>) -> () {
+fn eval_tree(statements: Vec<Statement>) -> () {
+    for statement in statements {
 
+    }
 }
 
 
@@ -146,17 +151,16 @@ named!(empty<&str, &str>, chain!(
         )
       );
 
-named!(simple_statement<&str, ShellCommand>,
+named!(simple_statement<&str, Statement>,
     chain!(
         whitespace? ~
         ex: executable? ~
-        whitespace? ~
-        args: arguments? ~
-        whitespace? ~
-        end_of_statement,
+        many0!(whitespace) ~
+        args: arguments ~
+        whitespace?,
         || {
-            ShellCommand::SimpleStatement(
-                (ex.unwrap_or("")), (args.unwrap_or((vec![])))
+            Statement::SimpleStatement(
+                (ex.unwrap_or("")), (args)
                 )
         }
     )
@@ -164,30 +168,34 @@ named!(simple_statement<&str, ShellCommand>,
 
 #[derive(Debug)]
 #[derive(PartialEq)]
-enum ShellCommand<'a> {
-    And(Box<ShellCommand<'a>>, Box<ShellCommand<'a>>),
-    Or(Box<ShellCommand<'a>>, Box<ShellCommand<'a>>),
+enum Statement<'a> {
+    And(Box<Statement<'a>>, Box<Statement<'a>>),
+    Or(Box<Statement<'a>>, Box<Statement<'a>>),
     SimpleStatement(&'a str, Vec<&'a str>),
-    Statements(Vec<&'a ShellCommand<'a>>)
 }
 
-
-named!(statement<&str, ShellCommand>, alt!(compound_statement | simple_statement));
-named!(and_statement<&str, ShellCommand>, chain!(
+named!(statement<&str, Statement>, chain!(
+        s: alt!(simple_statement | compound_statement) ,
+        || { s }
+        )
+    );
+named!(and_statement<&str, Statement>, chain!(
         s1: statement ~
         and ~
         s2: statement,
-        || { ShellCommand::And(Box::new(s1), Box::new(s2)) }
+        || { Statement::And(Box::new(s1), Box::new(s2)) }
         )
     );
-named!(or_statement<&str, ShellCommand>, chain!(
+named!(or_statement<&str, Statement>, chain!(
         s1: statement ~
         or ~
         s2: statement,
-        || { ShellCommand::Or(Box::new(s1), Box::new(s2)) }
+        || { Statement::Or(Box::new(s1), Box::new(s2)) }
         )
     );
-named!(compound_statement<&str, ShellCommand>, alt!(and_statement | or_statement));
+named!(compound_statement<&str, Statement>, alt!(and_statement | or_statement));
+// statements are delimited here
+named!(statement_list<&str, Vec<Statement> >, many0!(statement));
 
 #[cfg(test)]
 mod tests {
@@ -197,6 +205,7 @@ mod tests {
     use nom::Err::Position;
     use nom::ErrorKind::*;
     use nom::Needed;
+    use super::Statement;
 
     const ERROR_PROMPT: &'static str = "[0m[01;31m$[0m "; // our prompt is red
     const NORMAL_PROMPT: &'static str = "$ ";
@@ -221,7 +230,6 @@ mod tests {
     fn test_exit_message() {
         assert_eq!("Goodbye!", super::exit_message());
     }
-
 
     // parser tests
     #[test]
@@ -282,22 +290,28 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_simple_statement_parser() {
         assert_eq!(super::simple_statement("\n"),
-           Done("", super::ShellCommand::SimpleStatement("", vec![])));
-        assert_eq!(super::simple_statement("ls --color\n"),
-           Done("", super::ShellCommand::SimpleStatement("ls", vec!["--color"])));
-        assert_eq!(super::simple_statement("ls -a\n"),
-           Done("", super::ShellCommand::SimpleStatement("ls", vec!["-a"])));
+           Done("\n", super::Statement::SimpleStatement("", vec![])));
+        assert_eq!(super::simple_statement("ls --color"),
+           Done("", super::Statement::SimpleStatement("ls", vec!["--color"])));
+        assert_eq!(super::simple_statement("ls -a"),
+           Done("", super::Statement::SimpleStatement("ls", vec!["-a"])));
     }
 
     #[test]
-    #[ignore]
     fn test_compound_statement_parser() {
-        panic!()
-    }
+        assert_eq!(super::compound_statement("ls && echo 'hello'"),
+            Done("", super::Statement::And(
+                    (Box::new(Statement::SimpleStatement("ls", vec![]))),
+                    (Box::new(
+                        Statement::SimpleStatement("echo", vec![ "'hello'"]))
+                    )
+                )
+            )
+            );
 
+    }
     #[test]
     #[ignore]
     fn test_or_statement_parser() {
