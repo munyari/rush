@@ -158,11 +158,7 @@ named!(simple_statement<&str, Statement>,
         many0!(whitespace) ~
         args: arguments ~
         whitespace?,
-        || {
-            Statement::SimpleStatement(
-                (ex.unwrap_or("")), (args)
-                )
-        }
+        || { Statement::SimpleStatement(ex.unwrap_or(""), args) }
     )
 );
 
@@ -175,7 +171,8 @@ enum Statement<'a> {
 }
 
 named!(statement<&str, Statement>, chain!(
-        s: alt!(simple_statement | compound_statement) ,
+        // TODO: This isn't the correct order!
+        s: alt!(simple_statement | compound_statement),
         || { s }
         )
     );
@@ -301,15 +298,39 @@ mod tests {
 
     #[test]
     fn test_compound_statement_parser() {
-        assert_eq!(super::compound_statement("ls && echo 'hello'"),
+        assert_eq!(super::compound_statement("ls && echo hello"),
             Done("", super::Statement::And(
                     (Box::new(Statement::SimpleStatement("ls", vec![]))),
                     (Box::new(
-                        Statement::SimpleStatement("echo", vec![ "'hello'"]))
+                        Statement::SimpleStatement("echo", vec![ "hello"]))
                     )
                 )
             )
+        );
+
+        assert_eq!(super::compound_statement("true || false"),
+            Done("", Statement::Or(
+                    (Box::new(Statement::SimpleStatement("true", vec![]))),
+                    (Box::new(Statement::SimpleStatement("false", vec![]))),
+                    )
+                )
             );
+
+        assert_eq!(super::compound_statement("true"),
+            Done("", Statement::And(
+                    (Box::new(Statement::SimpleStatement("true", vec![]))),
+                    (Box::new(Statement::SimpleStatement("true", vec![]))),
+                    )
+                )
+            );
+
+        // assert_eq!(super::compound_statement("true && true || true"),
+        //     Done("", Statement::And(
+        //             (Box::new(Statement::SimpleStatement("true", vec![]))),
+        //             (Box::new(Statement::SimpleStatement("true", vec![]))),
+        //             )
+        //         )
+        //     );
 
     }
     #[test]
