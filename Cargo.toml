@@ -6,7 +6,7 @@ description = "The Rust shell"
 repository = "https://github.com/munyari/rush"
 readme = "README.md"
 keywords = ["shell"]
-license = "GPLv3"
+license = "GPL-3.0"
 
 [[bin]]
 name = "rush"
