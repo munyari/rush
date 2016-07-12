@@ -316,21 +316,21 @@ mod tests {
                 )
             );
 
-        assert_eq!(super::compound_statement("true"),
-            Done("", Statement::And(
-                    (Box::new(Statement::SimpleStatement("true", vec![]))),
-                    (Box::new(Statement::SimpleStatement("true", vec![]))),
-                    )
-                )
-            );
-
-        // assert_eq!(super::compound_statement("true && true || true"),
+        // assert_eq!(super::compound_statement("true"),
         //     Done("", Statement::And(
         //             (Box::new(Statement::SimpleStatement("true", vec![]))),
         //             (Box::new(Statement::SimpleStatement("true", vec![]))),
         //             )
         //         )
         //     );
+
+        assert_eq!(super::compound_statement("true && true || true"),
+            Done("", Statement::And(
+                    (Box::new(Statement::SimpleStatement("true", vec![]))),
+                    (Box::new(Statement::SimpleStatement("true", vec![]))),
+                    )
+                )
+            );
 
     }
     #[test]
