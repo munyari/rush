@@ -91,29 +91,39 @@ fn exit_message() -> &'static str {
     "Goodbye!"
 }
 
-fn run_statement(statement: &str) -> Result<()> {
-    let mut command_line = statement.split_whitespace();
-    let command = match command_line.next() {
-        Some(c) => c,
-        None    => return Ok(()),
-    };
+// Named fields in Struct
+fn run_statement(statement: &Statement) -> Result<()> {
+    match *statement {
+        Statement::And(ref s1, ref s2) => {
+            match run_statement(s1) {
+                Ok(_) => run_statement(s2),
+                Err(e) => Err(e),
+            }
+        }
+        Statement::Or(ref s1, ref s2) => {
+            let return1 = run_statement(s1);
+            let return2 = run_statement(s2);
+            if !return1.is_ok() {
+                return2
+            } else {
+                return1
+            }
+        }
 
-    // TODO: wrong arguments don't pass error
-    let arguments = command_line.collect::<Vec<&str>>();
-    let out = Command::new(command)
-        .args(&arguments[..])
-        .spawn();
+        Statement::Simple(command, ref arguments) => {
+            let out = Command::new(command)
+                .args(&arguments[..])
+                .spawn();
 
-    match out {
-        Err(e) => return Err(e),
-        _ => (),
-    };
+            if let Err(e) = out {
+                return Err(e);
+            }
 
-    // we wait until the command has exited before proceeding
-    try!(out.unwrap().wait());
+            try!(out.unwrap().wait());
 
-    // command has successfuly executed
-    Ok(())
+            Ok(())
+        }
+    }
 }
 
 fn print_disclaimer() -> () {
