@@ -59,6 +59,10 @@ fn start_shell() {
     }
 }
 
+fn builtin_pwd() {
+    std::env::current_dir().expect("Unable to retrieve working directory");
+}
+
 fn parse_statements(input: &str) -> Vec<Statement> {
     match statement_list(input) {
         IResult::Done(_, o) => o,
