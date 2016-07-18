@@ -125,20 +125,20 @@ fn print_disclaimer() -> () {
 
 // helper parsers
 named!(end_of_line<&str, &str>, tag_s!("\n"));
-fn alpha_or_underscore_or_dash(c: char) -> bool {
+
+fn alphanum_or_underscore_or_dash(c: char) -> bool {
     c == '_' || c == '-' || c.is_alphanum()
 }
 fn is_whitespace(c: char) -> bool {
     c == ' ' || c == '\t'
 }
 named!(whitespace<&str, &str>, take_while1_s!(is_whitespace));
-
-named!(statement_terminator<&str, &str>, is_a_s!(";"));
+named!(command_terminator<&str, &str>, tag_s!(";"));
 named!(end_of_statement<&str, &str>,
-           alt!(end_of_line | statement_terminator));
+       alt!(end_of_line | command_terminator));
 
-named!(executable<&str, &str>, take_while1_s!(alpha_or_underscore_or_dash));
-named!(argument<&str, &str>, take_while1_s!(alpha_or_underscore_or_dash));
+named!(executable<&str, &str>, take_while1_s!(alphanum_or_underscore_or_dash));
+named!(argument<&str, &str>, take_while1_s!(alphanum_or_underscore_or_dash));
 named!(arguments<&str, std::vec::Vec<&str> >, many0!(argument));
 named!(and<&str, &str>, tag_s!("&&"));
 named!(or<&str, &str>, tag_s!("||"));
@@ -152,47 +152,48 @@ named!(empty<&str, &str>, chain!(
       );
 
 named!(simple_statement<&str, Statement>,
-    chain!(
-        whitespace? ~
-        ex: executable? ~
-        many0!(whitespace) ~
-        args: arguments ~
-        whitespace?,
-        || { Statement::SimpleStatement(ex.unwrap_or(""), args) }
-    )
-);
+       chain!(
+           whitespace? ~
+           ex: executable ~
+           whitespace? ~
+           args: arguments ~
+           whitespace?,
+           || { Statement::Simple(ex, args) }
+           )
+      );
 
 #[derive(Debug)]
 #[derive(PartialEq)]
 enum Statement<'a> {
     And(Box<Statement<'a>>, Box<Statement<'a>>),
     Or(Box<Statement<'a>>, Box<Statement<'a>>),
-    SimpleStatement(&'a str, Vec<&'a str>),
+    Simple(&'a str, Vec<&'a str>),
 }
 
 named!(statement<&str, Statement>, chain!(
         // TODO: This isn't the correct order!
-        s: alt!(simple_statement | compound_statement),
+        // s: alt!(simple_statement | compound_statement),
+        s: alt_complete!(compound_statement | simple_statement),
         || { s }
         )
-    );
+      );
 named!(and_statement<&str, Statement>, chain!(
-        s1: statement ~
+        s1: simple_statement ~
         and ~
         s2: statement,
         || { Statement::And(Box::new(s1), Box::new(s2)) }
         )
-    );
+      );
 named!(or_statement<&str, Statement>, chain!(
-        s1: statement ~
+        s1: simple_statement ~
         or ~
         s2: statement,
         || { Statement::Or(Box::new(s1), Box::new(s2)) }
         )
-    );
+      );
 named!(compound_statement<&str, Statement>, alt!(and_statement | or_statement));
 // statements are delimited here
-named!(statement_list<&str, Vec<Statement> >, many0!(statement));
+named!(statement_list<&str, Vec<Statement> >, separated_list!(command_terminator, statement));
 
 #[cfg(test)]
 mod tests {
@@ -230,27 +231,27 @@ mod tests {
 
     // parser tests
     #[test]
-    fn test_statement_terminator_parser() {
-        assert_eq!(super::statement_terminator(";"), Done("", ";"));
-        assert_eq!(super::statement_terminator(" "),
-                   Error(Position(IsAStr, " ")));
+    fn test_command_terminator_parser() {
+        assert_eq!(super::command_terminator(";"), Done("", ";"));
+        assert_eq!(super::command_terminator(" "),
+        Error(Position(TagStr, " ")));
     }
 
     #[test]
     fn test_end_of_statement_parser() {
         assert_eq!(super::end_of_statement(";"), Done("", ";"));
         assert_eq!(super::end_of_statement("\n"), Done("", "\n"));
-        assert_eq!(super::statement_terminator(" "),
-                   Error(Position(IsAStr, " ")));
+        assert_eq!(super::command_terminator(" "),
+        Error(Position(TagStr, " ")));
     }
 
     #[test]
     fn test_executable_parser() {
         assert_eq!(super::executable("nvim"), Done("", "nvim"));
         assert_eq!(super::executable("_this_is_perfectly_valid_"),
-                   Done("", "_this_is_perfectly_valid_"));
+        Done("", "_this_is_perfectly_valid_"));
         assert_eq!(super::executable(" "),
-                   Error(Position(TakeWhile1Str, " ")));
+        Error(Position(TakeWhile1Str, " ")));
     }
 
     #[test]
@@ -259,9 +260,9 @@ mod tests {
         assert_eq!(super::argument("-a"), Done("", "-a"));
         assert_eq!(super::argument("a"), Done("", "a"));
         assert_eq!(super::argument("This_is_a_valid_argument"),
-                   Done("", "This_is_a_valid_argument"));
+        Done("", "This_is_a_valid_argument"));
         assert_eq!(super::argument("Only the first word is an argument"),
-                   Done(" the first word is an argument", "Only"));
+        Done(" the first word is an argument", "Only"));
     }
 
     #[test]
@@ -270,7 +271,7 @@ mod tests {
         assert_eq!(super::connective("||"), Done("", "||"));
         assert_eq!(super::connective(""), Incomplete(Needed::Size(2)));
         assert_eq!(super::connective("I'm not valid!"),
-                   Error(Position(Alt, "I'm not valid!")));
+        Error(Position(Alt, "I'm not valid!")));
 
     }
 
@@ -283,56 +284,52 @@ mod tests {
         assert_eq!(super::empty("  ;"), Done("", ""));
         assert_eq!(super::empty("\t;"), Done("", ""));
         assert_eq!(super::empty("I'm definitely not empty"),
-                   Error(Position(Alt, "I'm definitely not empty")));
+        Error(Position(Alt, "I'm definitely not empty")));
     }
 
     #[test]
     fn test_simple_statement_parser() {
-        assert_eq!(super::simple_statement("\n"),
-           Done("\n", super::Statement::SimpleStatement("", vec![])));
+        // assert_eq!(super::simple_statement("\n"),
+        //    Done("\n", super::Statement::Simple("", vec![])));
         assert_eq!(super::simple_statement("ls --color"),
-           Done("", super::Statement::SimpleStatement("ls", vec!["--color"])));
+        Done("", super::Statement::Simple("ls", vec!["--color"])));
         assert_eq!(super::simple_statement("ls -a"),
-           Done("", super::Statement::SimpleStatement("ls", vec!["-a"])));
+        Done("", super::Statement::Simple("ls", vec!["-a"])));
     }
 
     #[test]
     fn test_compound_statement_parser() {
         assert_eq!(super::compound_statement("ls && echo hello"),
-            Done("", super::Statement::And(
-                    (Box::new(Statement::SimpleStatement("ls", vec![]))),
-                    (Box::new(
-                        Statement::SimpleStatement("echo", vec![ "hello"]))
-                    )
+        Done("", super::Statement::And(
+                (Box::new(Statement::Simple("ls", vec![]))),
+                (Box::new(
+                        Statement::Simple("echo", vec![ "hello"]))
+                )
                 )
             )
         );
 
         assert_eq!(super::compound_statement("true || false"),
-            Done("", Statement::Or(
-                    (Box::new(Statement::SimpleStatement("true", vec![]))),
-                    (Box::new(Statement::SimpleStatement("false", vec![]))),
-                    )
+        Done("", Statement::Or(
+                (Box::new(Statement::Simple("true", vec![]))),
+                (Box::new(Statement::Simple("false", vec![]))),
                 )
-            );
-
-        // assert_eq!(super::compound_statement("true"),
-        //     Done("", Statement::And(
-        //             (Box::new(Statement::SimpleStatement("true", vec![]))),
-        //             (Box::new(Statement::SimpleStatement("true", vec![]))),
-        //             )
-        //         )
-        //     );
+            )
+        );
 
         assert_eq!(super::compound_statement("true && true || true"),
-            Done("", Statement::And(
-                    (Box::new(Statement::SimpleStatement("true", vec![]))),
-                    (Box::new(Statement::SimpleStatement("true", vec![]))),
-                    )
+        Done("", Statement::And(
+                (Box::new(Statement::Simple("true", vec![]))),
+                Box::new(Statement::Or(
+                        Box::new(Statement::Simple("true", vec![])),
+                        Box::new(Statement::Simple("true", vec![]))
+                        )
+                        )
                 )
-            );
-
+            )
+        );
     }
+
     #[test]
     #[ignore]
     fn test_or_statement_parser() {
@@ -346,9 +343,17 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_multiple_statement_parser() {
-        panic!()
+        assert_eq!(super::statement_list("true && true ; true || true"),
+        Done("", vec![Statement::And(
+                Box::new(Statement::Simple("true", vec![])),
+                Box::new(Statement::Simple("true", vec![]))
+                ),
+                Statement::Or(
+                    Box::new(Statement::Simple("true", vec![])),
+                    Box::new(Statement::Simple("true", vec![]))),
+        ])
+        );
     }
 
 }
