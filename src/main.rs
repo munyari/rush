@@ -53,7 +53,7 @@ fn start_shell() {
                     }
                 }
             } 
-            IResult::Incomplete(n) => {}
+            IResult::Incomplete(_) => {}
             IResult::Error(e) => panic!("Fatal parse error: {}", e)
         }
     }
@@ -62,20 +62,6 @@ fn start_shell() {
 fn builtin_pwd() {
     std::env::current_dir().expect("Unable to retrieve working directory");
 }
-
-fn parse_statements(input: &str) -> Vec<Statement> {
-    match statement_list(input) {
-        IResult::Done(_, o) => o,
-        _ => vec![],
-    }
-}
-
-fn eval_tree(statements: Vec<Statement>) -> () {
-    for statement in statements {
-
-    }
-}
-
 
 fn get_prompt(return_status: &Result<()>) -> &'static str {
     const ERROR_PROMPT: &'static str =  "[0m[01;31m$[0m "; // our prompt is red
@@ -135,33 +121,17 @@ fn print_disclaimer() -> () {
 }
 
 // helper parsers
-named!(end_of_line<&str, &str>, tag_s!("\n"));
 
 fn alphanum_or_underscore_or_dash(c: char) -> bool {
     c == '_' || c == '-' || c.is_alphanum()
 }
-fn is_whitespace(c: char) -> bool {
-    c == ' ' || c == '\t'
-}
-named!(whitespace<&str, &str>, take_while1_s!(is_whitespace));
+named!(whitespace<&str, &str>, is_a_s!(" \t"));
 named!(command_terminator<&str, &str>, tag_s!(";"));
-named!(end_of_statement<&str, &str>,
-       alt!(end_of_line | command_terminator));
-
 named!(executable<&str, &str>, take_while1_s!(alphanum_or_underscore_or_dash));
 named!(argument<&str, &str>, take_while1_s!(alphanum_or_underscore_or_dash));
 named!(arguments<&str, std::vec::Vec<&str> >, many0!(argument));
 named!(and<&str, &str>, tag_s!("&&"));
 named!(or<&str, &str>, tag_s!("||"));
-named!(connective<&str, &str>, alt!(and | or));
-
-// // used space here because multispace recognizes line feeds
-named!(empty<&str, &str>, chain!(
-        whitespace? ~ end_of_statement,
-        || { "" }
-        )
-      );
-
 named!(simple_statement<&str, Statement>,
        chain!(
            whitespace? ~
