@@ -13,10 +13,12 @@
 
 //     You should have received a copy of the GNU General Public License
 //     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+extern crate ansi_term;
 #[macro_use]
 extern crate nom;
 extern crate readline;
 
+use ansi_term::Colour::Red;
 use nom::*;
 
 use std::io::Result;
@@ -34,7 +36,7 @@ fn start_shell() {
     let mut return_status: Result<()> = Ok(());
 
     'repl: loop {
-        let user_input = match readline::readline(get_prompt(&return_status)) {
+        let user_input = match readline::readline(&get_prompt(&return_status)) {
             Err(InvalidUtf8) => {
                 println!("Input is not valid UTF8");
                 continue;
@@ -63,13 +65,14 @@ fn builtin_pwd() {
     std::env::current_dir().expect("Unable to retrieve working directory");
 }
 
-fn get_prompt(return_status: &Result<()>) -> &'static str {
-    const ERROR_PROMPT: &'static str =  "[0m[01;31m$[0m "; // our prompt is red
-    const NORMAL_PROMPT: &'static str = "$ ";
+fn get_prompt(return_status: &Result<()>) -> String {
+    // The error prompt is red
+    let error_prompt: String = Red.paint("$ ").to_string();
+    let normal_prompt: String = String::from("$ ");
 
     match *return_status {
-        Ok(()) => NORMAL_PROMPT,
-        _ => ERROR_PROMPT,
+        Ok(()) => normal_prompt,
+        _ => error_prompt,
     }
 }
 
