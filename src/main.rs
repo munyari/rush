@@ -44,21 +44,18 @@ fn start_shell() {
             Ok(s)            => s,
         };
 
-        // let statements = parse_statements(&user_input);
-        // eval_tree(statements);
-
-        // TODO: parsing logic
-        for statement in user_input.split(";") {
-            if statement.trim() == "exit" {
-                println!("{}", exit_message());
-                break 'repl;
-            }
-            return_status = run_statement(statement);
-            if let Err(ref e) = return_status {
-                println!("Invalid command: {}", e);
-            }
+        match statement_list(&user_input) {
+            IResult::Done(_, list) => {
+                for statement in list {
+                    return_status = run_statement(&statement);
+                    if let Err(ref e) = return_status {
+                        println!("Invalid command: {}", e);
+                    }
+                }
+            } 
+            IResult::Incomplete(n) => {}
+            IResult::Error(e) => panic!("Fatal parse error: {}", e)
         }
-
     }
 }
 
