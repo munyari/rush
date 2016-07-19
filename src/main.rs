@@ -21,10 +21,12 @@ extern crate readline;
 use ansi_term::Colour::Red;
 use nom::*;
 
-use std::io::Error;
+// TODO: Why am I using IO result???
 use std::io::Result;
 use std::process::Command;
 use readline::Error::*;
+
+mod builtin;
 
 fn main() {
     print_disclaimer();
@@ -55,15 +57,11 @@ fn start_shell() {
                         println!("Invalid command: {}", e);
                     }
                 }
-            } 
+            }
             IResult::Incomplete(_) => {}
             IResult::Error(e) => panic!("Fatal parse error: {}", e)
         }
     }
-}
-
-fn builtin_pwd() {
-    std::env::current_dir().expect("Unable to retrieve working directory");
 }
 
 fn get_prompt(return_status: &Result<()>) -> String {
