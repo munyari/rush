@@ -21,6 +21,7 @@ extern crate readline;
 use ansi_term::Colour::Red;
 use nom::*;
 
+use std::io::Error;
 use std::io::Result;
 use std::process::Command;
 use readline::Error::*;
@@ -107,6 +108,8 @@ fn run_statement(statement: &Statement) -> Result<()> {
             if let Err(e) = out {
                 return Err(e);
             }
+                "true" => Ok(()),
+                "false" => Err(Error::new(std::io::ErrorKind::Other, "false")),
 
             try!(out.unwrap().wait());
 
