@@ -20,15 +20,15 @@ extern crate readline;
 
 use ansi_term::Colour::Red;
 use nom::*;
-
-// TODO: Why am I using IO result???
-use std::io::Result;
 use std::process::Command;
 use readline::Error::*;
 
 mod builtin;
 mod parser;
+mod error;
+mod tests;
 use parser::Statement;
+use error::ShellError;
 
 fn main() {
     print_disclaimer();
@@ -38,7 +38,7 @@ fn main() {
 
 fn start_shell() {
 
-    let mut return_status: Result<()> = Ok(());
+    let mut return_status: Result<(), ShellError> = Ok(());
 
     'repl: loop {
         let user_input = match readline::readline(&get_prompt(&return_status)) {
@@ -56,6 +56,8 @@ fn start_shell() {
                 for statement in list {
                     return_status = run_statement(&statement);
                     if let Err(ref e) = return_status {
+                        // TODO: not right. When I run false this doesn't have
+                        // the right behavior
                         println!("Invalid command: {}", e);
                     }
                 }
@@ -66,7 +68,7 @@ fn start_shell() {
     }
 }
 
-fn get_prompt(return_status: &Result<()>) -> String {
+fn get_prompt(return_status: &Result<(), ShellError>) -> String {
     // The error prompt is red
     let error_prompt: String = Red.paint("$ ").to_string();
     let normal_prompt: String = String::from("$ ");
@@ -81,8 +83,8 @@ fn exit_message() -> &'static str {
     "Goodbye!"
 }
 
-// Named fields in Struct
-fn run_statement(statement: &Statement) -> Result<()> {
+// TODO: Named fields in Struct
+fn run_statement(statement: &Statement) -> Result<(), ShellError> {
     match *statement {
         Statement::And(ref s1, ref s2) => {
             match run_statement(s1) {
@@ -101,19 +103,30 @@ fn run_statement(statement: &Statement) -> Result<()> {
         }
 
         Statement::Simple(command, ref arguments) => {
-            let out = Command::new(command)
-                .args(&arguments[..])
-                .spawn();
+            // TODO: use a set that contains all built ins
+            match command {
+                "exit" => {
+                    println!("{}", exit_message());
+                    std::process::exit(0)
+                }
+                "cd" => builtin::cd(arguments),
+                "true" => builtin::te(),
+                "false" => builtin::fe(),
+                "pwd" => builtin::pwd(arguments),
+                _ => {
+                    let out = Command::new(command)
+                        .args(&arguments[..])
+                        .spawn();
 
-            if let Err(e) = out {
-                return Err(e);
+                    if let Err(e) = out {
+                        return Err(ShellError::from(e));
+                    }
+
+                    try!(out.unwrap().wait());
+
+                    Ok(())
+                }
             }
-                "true" => Ok(()),
-                "false" => Err(Error::new(std::io::ErrorKind::Other, "false")),
-
-            try!(out.unwrap().wait());
-
-            Ok(())
         }
     }
 }
@@ -124,167 +137,4 @@ fn print_disclaimer() -> () {
     \nThis is free software, and you are welcome to redistribute it \
     \nunder certain conditions; type `show c' for details.";
     println!("{}", disclaimer);
-}
-
-#[cfg(test)]
-mod tests {
-    use std::io;
-
-    use nom::IResult::*;
-    use nom::Err::Position;
-    use nom::ErrorKind::*;
-    use nom::Needed;
-    use super::Statement;
-
-    const ERROR_PROMPT: &'static str = "[0m[01;31m$[0m "; // our prompt is red
-    const NORMAL_PROMPT: &'static str = "$ ";
-
-    #[test]
-    fn test_prompt_on_successful_exit() {
-        assert_eq!(NORMAL_PROMPT, super::get_prompt(&Ok(())));
-    }
-
-    #[test]
-    fn test_prompt_on_unsuccessful_exit() {
-        assert_eq!(ERROR_PROMPT,
-                   super::get_prompt(
-                       &Err(
-                           io::Error::new(io::ErrorKind::Other, "oh no!")
-                           )
-                       )
-                  );
-    }
-
-    #[test]
-    fn test_exit_message() {
-        assert_eq!("Goodbye!", super::exit_message());
-    }
-
-    // parser tests
-    #[test]
-    fn test_command_terminator_parser() {
-        assert_eq!(super::command_terminator(";"), Done("", ";"));
-        assert_eq!(super::command_terminator(" "),
-        Error(Position(TagStr, " ")));
-    }
-
-    #[test]
-    fn test_end_of_statement_parser() {
-        assert_eq!(super::end_of_statement(";"), Done("", ";"));
-        assert_eq!(super::end_of_statement("\n"), Done("", "\n"));
-        assert_eq!(super::command_terminator(" "),
-        Error(Position(TagStr, " ")));
-    }
-
-    #[test]
-    fn test_executable_parser() {
-        assert_eq!(super::executable("nvim"), Done("", "nvim"));
-        assert_eq!(super::executable("_this_is_perfectly_valid_"),
-        Done("", "_this_is_perfectly_valid_"));
-        assert_eq!(super::executable(" "),
-        Error(Position(TakeWhile1Str, " ")));
-    }
-
-    #[test]
-    fn test_argument() {
-        assert_eq!(super::argument("--color"), Done("", "--color"));
-        assert_eq!(super::argument("-a"), Done("", "-a"));
-        assert_eq!(super::argument("a"), Done("", "a"));
-        assert_eq!(super::argument("This_is_a_valid_argument"),
-        Done("", "This_is_a_valid_argument"));
-        assert_eq!(super::argument("Only the first word is an argument"),
-        Done(" the first word is an argument", "Only"));
-    }
-
-    #[test]
-    fn test_connective_parser() {
-        assert_eq!(super::connective("&&"), Done("", "&&"));
-        assert_eq!(super::connective("||"), Done("", "||"));
-        assert_eq!(super::connective(""), Incomplete(Needed::Size(2)));
-        assert_eq!(super::connective("I'm not valid!"),
-        Error(Position(Alt, "I'm not valid!")));
-
-    }
-
-    #[test]
-    fn test_empty_parser() {
-        assert_eq!(super::empty("\n"), Done("", ""));
-        assert_eq!(super::empty("  \n"), Done("", ""));
-        assert_eq!(super::empty("\t\n"), Done("", ""));
-        assert_eq!(super::empty(";"), Done("", ""));
-        assert_eq!(super::empty("  ;"), Done("", ""));
-        assert_eq!(super::empty("\t;"), Done("", ""));
-        assert_eq!(super::empty("I'm definitely not empty"),
-        Error(Position(Alt, "I'm definitely not empty")));
-    }
-
-    #[test]
-    fn test_simple_statement_parser() {
-        // assert_eq!(super::simple_statement("\n"),
-        //    Done("\n", super::Statement::Simple("", vec![])));
-        assert_eq!(super::simple_statement("ls --color"),
-        Done("", super::Statement::Simple("ls", vec!["--color"])));
-        assert_eq!(super::simple_statement("ls -a"),
-        Done("", super::Statement::Simple("ls", vec!["-a"])));
-    }
-
-    #[test]
-    fn test_compound_statement_parser() {
-        assert_eq!(super::compound_statement("ls && echo hello"),
-        Done("", super::Statement::And(
-                (Box::new(Statement::Simple("ls", vec![]))),
-                (Box::new(
-                        Statement::Simple("echo", vec![ "hello"]))
-                )
-                )
-            )
-        );
-
-        assert_eq!(super::compound_statement("true || false"),
-        Done("", Statement::Or(
-                (Box::new(Statement::Simple("true", vec![]))),
-                (Box::new(Statement::Simple("false", vec![]))),
-                )
-            )
-        );
-
-        assert_eq!(super::compound_statement("true && true || true"),
-        Done("", Statement::And(
-                (Box::new(Statement::Simple("true", vec![]))),
-                Box::new(Statement::Or(
-                        Box::new(Statement::Simple("true", vec![])),
-                        Box::new(Statement::Simple("true", vec![]))
-                        )
-                        )
-                )
-            )
-        );
-    }
-
-    #[test]
-    #[ignore]
-    fn test_or_statement_parser() {
-        panic!()
-    }
-
-    #[test]
-    #[ignore]
-    fn test_and_statement_parser() {
-        panic!()
-    }
-
-    #[test]
-    fn test_multiple_statement_parser() {
-        assert_eq!(super::statement_list("true && true ; true || true"),
-        Done("", vec![Statement::And(
-                Box::new(Statement::Simple("true", vec![])),
-                Box::new(Statement::Simple("true", vec![]))
-                ),
-                Statement::Or(
-                    Box::new(Statement::Simple("true", vec![])),
-                    Box::new(Statement::Simple("true", vec![]))),
-        ])
-        );
-    }
-
 }
